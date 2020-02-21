@@ -13,7 +13,7 @@ function Add-AzureDevOpsAccount {
 
 }
 
-function Get-AzDevOpsServiceEndpointId {
+function Get-AzDevOpsServiceEndpoint {
     <#
     .Synopsis
        For now the function gets a Azure DevOps service endpoint ID.
@@ -41,8 +41,69 @@ function Get-AzDevOpsServiceEndpointId {
 
     }
 
-    (((Invoke-RestMethod @requestParameters -UseBasicParsing).value) | Where-Object { $_.name -eq $endpointName }).id
+    (((Invoke-RestMethod @requestParameters -UseBasicParsing).value) | Where-Object { $_.name -eq $endpointName })
 }
+
+function New-AzDevOpsServiceEndpoint {
+    
+<#  New-AzDevOpsServiceEndpoint -Organization "devopsglobal" `
+                        -Project "Azure-Samples" `
+                        -tenantid "56f9bee4-d4f1-4551-9e9b-8d9a7bf1d004" `
+                        -servicePrincipalId "56232a06-9e8e-4af9-822a-0e9b80d8f4f3" `
+                        -appPassword "3242342" `
+                        -subscriptionName "Visual Studio Enterprise" `
+                        -subscriptionId "b5e05303-a7cb-41ce-a1ac-6c8420a44235" `
+                        -AzureDevOpsServiceName "Test2" `
+                        -headers $headers #>
+
+        param(
+            $tenantid,
+            $servicePrincipalId,
+            $Organization,
+            $Project,
+            $appPassword,
+            $subscriptionName,
+            $subscriptionId,
+            $AzureDevOpsServiceName,
+            $headers
+        )
+             $requestBody = @{
+              "authorization"= @{
+                "parameters"= @{
+                  "tenantid"= "$tenantId"
+                  "serviceprincipalid"= "$servicePrincipalId"
+                  "authenticationType"= "spnKey"
+                  "serviceprincipalkey"= "$appPassword"
+                }
+            "scheme"= "ServicePrincipal"
+          }
+              "data"= @{
+                "subscriptionId"= "$subscriptionId"
+                "subscriptionName"= "$subscriptionName"
+                "environment"= "AzureCloud"
+                "scopeLevel"= "Subscription"
+                "creationMode"= "Manual"
+              }
+              "name"= "$AzureDevOpsServiceName"
+              "type"= "azurerm"
+              "url"= "https=//management.azure.com/"
+        
+        } | ConvertTo-Json
+
+
+        $requestParameters = @{
+        
+            Uri = "https://dev.azure.com/$Organization/$Project/_apis/serviceendpoint/endpoints?api-version=5.1-preview.2"
+            Method = 'POST' 
+            ContentType = "application/json"
+            Headers = $headers
+            Body = $requestBody
+        
+        }
+        
+        $response = Invoke-RestMethod @requestParameters -UseBasicParsing
+
+    }
 
 function Get-AzureDevOpsGroupId {
     
@@ -171,3 +232,209 @@ function Add-AzureDevOpsVarGroupRole {
 
     (Invoke-RestMethod @requestParameters)
 }
+
+# Boards
+
+function Add-AzDevOpsCliLogin {
+
+    param(
+        $Organization,
+        $AccessToken
+    )
+
+    Write-Host "Logging in to $Organization" 
+    echo $AccessToken | az devops login --organization "https://dev.azure.com/$Organization/"
+
+}
+
+function New-AzDevOpsWiqlQueryResult {
+
+    param(
+        $organization,
+        $query,
+        $Headers
+    )
+
+    $Headers.Remove('Content-Type') 
+    $Headers.Add("Content-Type", "application/json")
+    
+    $body = @{
+  
+       "query" = $query
+    
+    } | ConvertTo-Json
+
+    $requestParameters = @{
+        
+        Uri     = "https://dev.azure.com/$organization/_apis/wit/wiql?api-version=5.1"
+        Method  = "POST"
+        Headers = $Headers
+        Body = $body
+
+    }
+
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+}
+
+function Get-AzDevOpsWorkItem {
+    
+    param(
+        $Organization,
+        $id,
+        $Headers
+    )
+    
+    $requestParameters = @{
+    
+        Uri = "https://dev.azure.com/$Organization/_apis/wit/workitems/$id`?`$expand=all&api-version=5.1"
+        Method = 'GET'
+        Headers = $Headers
+    
+    }
+    
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+
+}
+
+function New-AzDevOpsWorkItem {
+    
+    param(
+        $Organization,
+        $Project,
+        $WorkItemType,
+        $WorkItemName,
+        $Headers
+    )
+
+    $Headers.Remove('Content-Type') 
+    $Headers.Add('Content-Type', 'application/json-patch+json')
+
+    $Body = @()
+
+    class RequestBody {
+        [string]$op = "add"
+        [string]$path = "/fields/System.Title"
+        [string]$from = $null
+        [string]$value = $WorkItemName
+        }
+
+    $row = [RequestBody]::New() 
+    $Body += $row
+    $BodyJson = ConvertTo-Json -InputObject $Body
+    $BodyJson
+
+    
+    $requestParameters = @{
+    
+        Uri = "https://dev.azure.com/$Organization/$Project/_apis/wit/workitems/`$$WorkItemType`?api-version=5.1"
+        Method = 'POST'
+        Headers = $Headers
+        Body = $BodyJson
+    
+    }
+    
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+
+}
+
+function Update-AzDevOpsWorkItem {
+    
+  # Update-AzDevOpsWorkItem -Organization 'devopsglobal' -Project 'Azure-Samples' -releaseWorkItemId 1 -workitemId 6 -Headers $header
+   
+    param(
+        $Organization,
+        $workitemId,
+        $workitemRev,
+        $releaseWorkItemId,
+        $Headers
+    )
+
+    $Headers.Remove('Content-Type') 
+    $Headers.Add('Content-Type', 'application/json-patch+json')
+
+$Body = @(
+    @{
+         'op' = "Test"
+         'path' = '/rev'
+         'from' = $null
+         'value' = $workitemRev
+     }
+    @{ 
+        "op"= "add"
+        "path"= "/relations/-"
+        "value"= @{
+             "rel"= "System.LinkTypes.Related"
+             "url"= "https://dev.azure.com/$Organization/_apis/wit/workItems/$workitemId"
+             }
+    }
+) | ConvertTo-Json
+
+    $requestParameters = @{
+    
+        Uri = "https://dev.azure.com/$Organization/_apis/wit/workitems/$releaseWorkItemId`?api-version=5.1"
+        Method = 'PATCH'
+        Headers = $Headers
+        Body = $Body
+    
+    }
+    
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+
+}
+
+function Get-AzDevOpsDeploymentGroup {
+    
+    # Get-AzDevOpsDeploymentGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -deploymentGroupName "Test2" -Headers $headers
+
+    param(
+    $Organization,
+    $Project,
+    $deploymentGroupName,
+    $Headers    
+    )
+
+    $check = @{
+    
+    Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/deploymentgroups?api-version=5.0-preview.1"
+    Method = 'GET'
+    Headers = $Headers
+  
+  }
+
+    $body = @{
+                name = "$deploymentGroupName"
+                description = "Deployment group created during automatic deployment"
+            } | ConvertTo-Json
+
+    (Invoke-RestMethod @check -UseBasicParsing).value | where {$_.Name -eq $deploymentGroupName}
+
+}
+
+function New-AzDevOpsDeploymentGroup {
+
+    # New-AzDevOpsDeploymentGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -deploymentGroupName "Test3" -Headers $headers
+    
+    param(
+        $Organization,
+        $Project,        
+        $deploymentGroupName,
+        $headers
+    )
+
+    $body = @{
+            name = "$deploymentGroupName"
+            description = "Deployment group created during automatic deployment"
+        } | ConvertTo-Json
+
+    $create = @{
+        Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/deploymentgroups?api-version=5.0-preview.1"
+        Method = 'POST'
+        Headers = $Headers
+        Body = $body
+        ContentType = "application/json"
+    }
+
+    (Invoke-RestMethod @create -UseBasicParsing)
+
+}
+
