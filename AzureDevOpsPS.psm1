@@ -20,7 +20,7 @@ function Get-AzDevOpsServiceEndpoint {
     .DESCRIPTION
        Later it will be expanded to do more stuff - see TODO
     .EXAMPLE
-       Get-AzDevOpsServiceEndpointId -organization "devopsglobal" -project "Azure-Samples" -Headers $headers -endpointName "Visual Studio Enterprise (43425303-a7cb-41ce-a1ac-6c84223444235)"
+       Get-AzDevOpsServiceEndpointId -organization "devopsglobal" -project "Azure-Samples" -Headers $headers -endpointName "Visual Studio Enterprise (43425303-a7cb-41ce-a1ac-xxxxx)"
     .OUTPUTS
        e.g. 125b62eb-4fd8-4cbc-a671-88f2eb23dcac
     #>
