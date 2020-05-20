@@ -1,16 +1,24 @@
 # Azure DevOps PS module
-
-function Add-AzureDevOpsAccount {
+function Test-AzDevOpsSession {
+    if ($null -eq $Global:headers) {
+        Write-Warning "You are not connected to Azure DevOps use Add-AzDevOpsAccount -accesstoken '<PAT>' to connect."
+        break
+    }
+}
+function Add-AzDevOpsAccount {
+    
+    # Add-AzDevOpsAccount -accesstoken "000000000000000000000"
     
     param(
-        $azureDevOpsPatToken
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $accesstoken
     )
 
-    $encodedAzureDevOpsPatToken = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(":$azureDevOpsPatToken"))
-    $Headers = @{Authorization = ("Basic {0}" -f $encodedAzureDevOpsPatToken) }
+    $encodedAzureDevOpsPatToken = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(":$accesstoken"))
+    $Global:Headers = @{Authorization = ("Basic {0}" -f $encodedAzureDevOpsPatToken) }
 
     return $Headers
-
 }
 
 function Get-AzDevOpsServiceEndpoint {
@@ -20,53 +28,72 @@ function Get-AzDevOpsServiceEndpoint {
     .DESCRIPTION
        Later it will be expanded to do more stuff - see TODO
     .EXAMPLE
-       Get-AzDevOpsServiceEndpointId -organization "devopsglobal" -project "Azure-Samples" -Headers $headers -endpointName "Visual Studio Enterprise (43425303-a7cb-41ce-a1ac-xxxxx)"
+       Get-AzDevOpsServiceEndpointId -organization "devopsglobal" -project "Azure-Samples" -Headers $headers -endpointName "<endpoint>"
     .OUTPUTS
-       e.g. 125b62eb-4fd8-4cbc-a671-88f2eb23dcac
+       e.g. 1232362eb-4fd8-4cbc-a671-88f2eb23dcaz
     #>
 
     # TODO - add switch and expand function to get more properties such as Name, ID etc.
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $project,
+        [Parameter(Mandatory = $true)]
         $endpointName,
-        $Headers
+        [Parameter(Mandatory = $false)]
+        $headers
     )
- 
+
+    Test-AzDevOpsSession
+
     $requestParameters = @{
         
         Uri     = "https://dev.azure.com/$organization/$project/_apis/serviceendpoint/endpoints?api-version=5.0-preview.2"
         Method  = "GET"
-        Headers = $Headers
+        Headers = $global:Headers
 
     }
 
     (((Invoke-RestMethod @requestParameters -UseBasicParsing).value) | Where-Object { $_.name -eq $endpointName })
 }
-
 function New-AzDevOpsServiceEndpoint {
     
-<#  New-AzDevOpsServiceEndpoint -Organization "devopsglobal" `
-                        -Project "Azure-Samples" `
-                        -tenantid "56f9bee4-d4f1-4551-9e9b-8d9a7bf1d004" `
-                        -servicePrincipalId "56232a06-9e8e-4af9-822a-0e9b80d8f4f3" `
-                        -appPassword "3242342" `
-                        -subscriptionName "Visual Studio Enterprise" `
-                        -subscriptionId "b5e05303-a7cb-41ce-a1ac-6c8420a44235" `
-                        -AzureDevOpsServiceName "Test2" `
+<#  New-AzDevOpsServiceEndpoint -Organization "<organization>" `
+                        -Project "<project>" `
+                        -tenantid "<tenantId>" `
+                        -servicePrincipalId "<service principal Id>" `
+                        -appPassword "<password>" `
+                        -subscriptionName "<subscription name>" `
+                        -subscriptionId "<subscription id>" `
+                        -AzureDevOpsServiceName "<new name>" `
                         -headers $headers #>
 
-        param(
+            param(
+            [CmdletBinding]
+            [Parameter(Mandatory = $true)]
             $tenantid,
+            [Parameter(Mandatory = $true)]
             $servicePrincipalId,
+            [Parameter(Mandatory = $true)]
             $Organization,
+            [Parameter(Mandatory = $true)]
             $Project,
-            $appPassword,
+            [Parameter(Mandatory = $true)]
+            $appPassword, # TODO - Secure this
+            [Parameter(Mandatory = $true)]
             $subscriptionName,
+            [Parameter(Mandatory = $true)]
             $subscriptionId,
+            [Parameter(Mandatory = $true)]
             $AzureDevOpsServiceName,
+            [Parameter(Mandatory = $false)]
             $headers
         )
+
+        Test-AzDevOpsSession
+
              $requestBody = @{
               "authorization"= @{
                 "parameters"= @{
@@ -96,100 +123,156 @@ function New-AzDevOpsServiceEndpoint {
             Uri = "https://dev.azure.com/$Organization/$Project/_apis/serviceendpoint/endpoints?api-version=5.1-preview.2"
             Method = 'POST' 
             ContentType = "application/json"
-            Headers = $headers
+            Headers = $global:headers
             Body = $requestBody
         
         }
         
-        $response = Invoke-RestMethod @requestParameters -UseBasicParsing
+        Invoke-RestMethod @requestParameters -UseBasicParsing
+}2
+function Add-AzDevOpsEndpointRole {
 
-    }
-
-function Get-AzureDevOpsGroupId {
-    
-    # Get-AzureDevOpsGroupId -azDevOpsGroup "[Buzzer]\Buzzer Team" -organization "devopsglobal" -Headers $headers
-    # TODO - add switch and expand function to get properties as well e.g ID.
-
-    param(
-        $azDevOpsGroup,
-        $Headers,
-        $organization
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $groupId,
+        [Parameter(Mandatory = $true)]
+        $endpintId,
+        [Parameter(Mandatory = $true)]
+        $projectId,
+        [Parameter(Mandatory = $true)]
+        $organizationName,
+        [Parameter(Mandatory = $false)]
+        $headers
     )
+        Test-AzDevOpsSession
+
+        $requestBody = "[{roleName: `"User`", userId: `"$groupId`"}]"
+
+        $requestParameters = @{
+
+            Uri = "https://$organizationName.visualstudio.com/_apis/securityroles/scopes/distributedtask.serviceendpointrole/roleassignments/resources/$projectId`_$endpintId`?api-version=5.0-preview.1"
+            Method = "PUT"
+            Headers = $global:headers
+            Body = $requestBody
+            ContentType = "application/json";
+        
+        }
+
+        Invoke-RestMethod @requestParameters -UseBasicParsing
+}
+
+function Get-AzDevOpsSecurityGroup {
+    
+    # Get-AzDevOpsSecurityGroup -securitygroup "[Buzzer]\Buzzer Team" -organization "devopsglobal" -Headers $headers
+    # TODO - add switch and expand function to get properties as well e.g ID.
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $securitygroup,
+        [Parameter(Mandatory = $true)]
+        $organization,
+        [Parameter(Mandatory = $false)]
+        $Headers
+    )
+
+    Test-AzDevOpsSession
 
     $requestParameters = @{
         
         Uri     = "https://vssps.dev.azure.com/$organization/_apis/graph/groups?api-version=5.0-preview.1"
         Method  = "GET"
-        Headers = $Headers        
+        Headers = $Global:headers        
 
     }
 
-    ((Invoke-RestMethod @requestParameters -UseBasicParsing).value | Where-Object { $_.principalName -eq $azDevOpsGroup }).originid
+    ((Invoke-RestMethod @requestParameters -UseBasicParsing).value | Where-Object { $_.principalName -eq $securitygroup })
 
 }
 
-function Get-AzureDevOpsProjectId {
+function Get-AzDevOpsProject {
 
-    # Get-AzureDevOpsProjectId -organization "devopsglobal" -project "Azure-Samples" -Headers $headers
+    # Get-AzDevOpsProject -organization "devopsglobal" -project "Azure" -Headers $headers
     
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $project,
+        [Parameter(Mandatory = $false)]
         $Headers
     ) 
     
+    Test-AzDevOpsSession
+
     $requestParameters = @{
         
         Uri     = "https://dev.azure.com/$organization/_apis/projects?api-version=5.0"
         Method  = "GET"
-        Headers = $Headers
+        Headers = $global:headers
 
     }
     
-    ((Invoke-RestMethod @requestParameters -UseBasicParsing).value | Where-Object { $_.Name -eq $project }).id
+    ((Invoke-RestMethod @requestParameters -UseBasicParsing).value | Where-Object { $_.Name -eq $project })
 
 }
 
-function Get-AzureDevOpsVarGroup {
+function Get-AzDevOpsVarGroup {
     
-    # Get-AzureDevOpsVarGroup -organization "devopsglobal" -project "Azure-Samples" -varGroup "var2" -headers $headers
+    # Get-AzDevOpsVarGroup -organization "devopsglobal" -project "Azure-Samples" -varGroup "var2" -headers $headers
 
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $project,
+        [Parameter(Mandatory = $true)]
         $varGroup,
+        [Parameter(Mandatory = $false)]
         $headers
     )
+
+    Test-AzDevOpsSession
 
     $requestProperties = @{
     
         Method  = "Get"
         Uri     = "https://dev.azure.com/$organization/$project/_apis/distributedtask/variablegroups?groupName=$varGroup&queryOrder=IdDescending&api-version=5.0-preview.1"
-        Headers = $headers
+        Headers = $Global:headers
     }
 
     Invoke-RestMethod @requestProperties
 }
 
-function Get-AzureDevOpsVarGroupSecurity {
+function Get-AzDevOpsVarGroupSecurity {
     
     # Get-VariableGroupSecurity -Headers $headers -organization devopsglobal -varGroupId 2 -groupId 8213a116-e7d5-47ae-a24a-b8324d8cd45f -projectid 3214bf44-6448-4c39-95c7-0159d4ff2b7e
 
     param (
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $varGroupId,
+        [Parameter(Mandatory = $true)]
         $groupId,
+        [Parameter(Mandatory = $true)]
         $projectid,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
     
+    Test-AzDevOpsSession
+
     $encodedValue = [System.Web.HttpUtility]::UrlEncode('$' + $varGroupId) 
     $Uri = "https://dev.azure.com/$organization/_apis/securityroles/scopes/distributedtask.variablegroup/roleassignments/resources/$projectId$encodedValue"
     
     $requestParameters = @{
         Uri     = $Uri
         Method  = "GET"
-        Headers = $headers
+        Headers = $Global:headers
     }
 
     Write-output $requestParameters.uri
@@ -199,20 +282,29 @@ function Get-AzureDevOpsVarGroupSecurity {
     (Invoke-RestMethod @requestParameters).value
 }
 
-function Add-AzureDevOpsVarGroupRole {
+function Add-AzDevOpsVarGroupRole {
 
     # Add-VariableGroupRole -Headers $headers -organization devopsglobal -varGroupId 2 -projectid c1c4bf44-6448-4c39-95c7-0159d4ff2b7e -groupId "86b8a116-e7d5-47ae-a24a-b8324d8cd45f" -role "Administrator"
 
     param (
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $projectid,
+        [Parameter(Mandatory = $true)]
         $varGroupId,
+        [Parameter(Mandatory = $true)]
         $groupId,
+        [Parameter(Mandatory = $true)]
         [ValidateSet("Reader", "User", "Administrator")]
         $role,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
-    
+
+    Test-AzDevOpsSession
+
     $encodedValue = [System.Web.HttpUtility]::UrlEncode('$' + $varGroupId) 
     $Uri = "https://dev.azure.com/$organization/_apis/securityroles/scopes/distributedtask.variablegroup/roleassignments/resources/$projectId$encodedValue" + "?api-version=5.0-preview.1"
     
@@ -221,7 +313,7 @@ function Add-AzureDevOpsVarGroupRole {
     $requestParameters = @{
         Uri         = $Uri
         Method      = "PUT"
-        Headers     = $headers
+        Headers     = $Global:headers
         Body        = $requestBody
         ContentType = "application/json; api-version=5.0-preview.1"
     }
@@ -237,23 +329,34 @@ function Add-AzureDevOpsVarGroupRole {
 
 function Add-AzDevOpsCliLogin {
 
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $Organization,
+        [Parameter(Mandatory = $true)]
         $AccessToken
     )
 
     Write-Host "Logging in to $Organization" 
-    echo $AccessToken | az devops login --organization "https://dev.azure.com/$Organization/"
+    Write-Output $AccessToken | az devops login --organization "https://dev.azure.com/$Organization/"
 
 }
 
-function New-AzDevOpsWiqlQueryResult {
+function Find-AzDevOpsWorkItem {
 
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $organization,
+        [Parameter(Mandatory = $true)]
         $query,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
+
+    Test-AzDevOpsSession
+
+    $Headers = $Global:headers
 
     $Headers.Remove('Content-Type') 
     $Headers.Add("Content-Type", "application/json")
@@ -268,7 +371,7 @@ function New-AzDevOpsWiqlQueryResult {
         
         Uri     = "https://dev.azure.com/$organization/_apis/wit/wiql?api-version=5.1"
         Method  = "POST"
-        Headers = $Headers
+        Headers = $headers
         Body = $body
 
     }
@@ -278,17 +381,23 @@ function New-AzDevOpsWiqlQueryResult {
 
 function Get-AzDevOpsWorkItem {
     
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $Organization,
+        [Parameter(Mandatory = $true)]
         $id,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
     
+    Test-AzDevOpsSession
+
     $requestParameters = @{
     
         Uri = "https://dev.azure.com/$Organization/_apis/wit/workitems/$id`?`$expand=all&api-version=5.1"
         Method = 'GET'
-        Headers = $Headers
+        Headers = $Global:headers
     
     }
     
@@ -298,13 +407,23 @@ function Get-AzDevOpsWorkItem {
 
 function New-AzDevOpsWorkItem {
     
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $Organization,
+        [Parameter(Mandatory = $true)]
         $Project,
+        [Parameter(Mandatory = $true)]
         $WorkItemType,
+        [Parameter(Mandatory = $true)]
         $WorkItemName,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
+
+    Test-AzDevOpsSession
+
+    $Headers = $Global:headers
 
     $Headers.Remove('Content-Type') 
     $Headers.Add('Content-Type', 'application/json-patch+json')
@@ -341,13 +460,23 @@ function Update-AzDevOpsWorkItem {
     
   # Update-AzDevOpsWorkItem -Organization 'devopsglobal' -Project 'Azure-Samples' -releaseWorkItemId 1 -workitemId 6 -Headers $header
    
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $Organization,
+        [Parameter(Mandatory = $true)]
         $workitemId,
+        [Parameter(Mandatory = $true)]
         $workitemRev,
+        [Parameter(Mandatory = $true)]
         $releaseWorkItemId,
+        [Parameter(Mandatory = $false)]
         $Headers
     )
+
+    Test-AzDevOpsSession
+
+    $Headers = $Global:headers
 
     $Headers.Remove('Content-Type') 
     $Headers.Add('Content-Type', 'application/json-patch+json')
@@ -386,40 +515,48 @@ function Get-AzDevOpsDeploymentGroup {
     
     # Get-AzDevOpsDeploymentGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -deploymentGroupName "Test2" -Headers $headers
 
-    param(
+        param(
+        [CmdletBinding]
+    [Parameter(Mandatory = $true)]
     $Organization,
+    [Parameter(Mandatory = $true)]
     $Project,
+    [Parameter(Mandatory = $true)]
     $deploymentGroupName,
+    [Parameter(Mandatory = $false)]
     $Headers    
     )
+
+    Test-AzDevOpsSession
 
     $check = @{
     
     Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/deploymentgroups?api-version=5.0-preview.1"
     Method = 'GET'
-    Headers = $Headers
+    Headers = $global:headers
   
   }
 
-    $body = @{
-                name = "$deploymentGroupName"
-                description = "Deployment group created during automatic deployment"
-            } | ConvertTo-Json
-
-    (Invoke-RestMethod @check -UseBasicParsing).value | where {$_.Name -eq $deploymentGroupName}
-
+    (Invoke-RestMethod @check -UseBasicParsing).value | Where-Object {$_.Name -eq $deploymentGroupName}
 }
 
 function New-AzDevOpsDeploymentGroup {
 
     # New-AzDevOpsDeploymentGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -deploymentGroupName "Test3" -Headers $headers
     
-    param(
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
         $Organization,
-        $Project,        
+        [Parameter(Mandatory = $true)]
+        $Project,
+        [Parameter(Mandatory = $true)]
         $deploymentGroupName,
+        [Parameter(Mandatory = $false)]
         $headers
     )
+
+    Test-AzDevOpsSession
 
     $body = @{
             name = "$deploymentGroupName"
@@ -429,7 +566,7 @@ function New-AzDevOpsDeploymentGroup {
     $create = @{
         Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/deploymentgroups?api-version=5.0-preview.1"
         Method = 'POST'
-        Headers = $Headers
+        Headers = $Global:headers
         Body = $body
         ContentType = "application/json"
     }
@@ -438,3 +575,159 @@ function New-AzDevOpsDeploymentGroup {
 
 }
 
+function Add-AzDevOpsDeploymentGroupRole {
+
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $groupId,
+        [Parameter(Mandatory = $true)]
+        $deploymentGroupId,
+        [Parameter(Mandatory = $true)]
+        $projectId,
+        [Parameter(Mandatory = $true)]
+        $organizationName,
+        [Parameter(Mandatory = $false)]
+        $Headers
+    )
+
+    Test-AzDevOpsSession
+
+        $requestBody = "[{roleName: `"User`", userId: `"$groupId`"}]"
+
+        $requestParameters = @{
+
+            Uri = "https://$organizationName.visualstudio.com/_apis/securityroles/scopes/distributedtask.machinegrouprole/roleassignments/resources/$projectId`_$deploymentGroupId`?api-version=5.1-preview.1"
+            Method = "PUT"
+            Headers = $Global:headers
+            Body = $requestBody
+            ContentType = "application/json"
+
+    }
+    Invoke-RestMethod @requestParameters -UseBasicParsing
+}
+
+# Variable group operations
+
+function Get-AzDevOpsVariableGroup {
+
+    # Get-AzDevOpsVariableGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -AzureDevOpsVarGroupName "test2" -headers $headers
+    
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $Organization,
+        [Parameter(Mandatory = $true)]
+        $Project,
+        [Parameter(Mandatory = $true)]
+        $AzureDevOpsVarGroupName,
+        [Parameter(Mandatory = $false)]
+        $headers
+    )
+
+    Test-AzDevOpsSession
+
+    $requestParameters = @{
+    
+        Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/variablegroups?api-version=4.1-preview.1"
+        Method = 'GET'
+        Headers = $Global:headers
+        
+    }
+
+	(Invoke-RestMethod @requestParameters -UseBasicParsing).value | Where-Object {$_.name -eq $AzureDevOpsVarGroupName}
+}
+
+function New-AzDevOpsVariableGroup {
+
+    # TODO - Document how the variable object works
+    # New-AzDevOpsVariableGroup -Organization 'devopsglobal' -Project 'Azure-Samples' -AzureDevOpsVarGroupName 'Test' -azureDevOpsEndpointId '125b66eb-4fd8-4cbc-a671-88f2eb23dcac' -variables $variables -headers $headers
+
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $Organization,
+        [Parameter(Mandatory = $true)]
+        $Project,
+        [Parameter(Mandatory = $true)]
+        $AzureDevOpsVarGroupName,
+        [Parameter(Mandatory = $true)]
+        $azureDevOpsEndpointId,
+        [Parameter(Mandatory = $true)]
+        $variables,
+        [Parameter(Mandatory = $false)]
+        $headers
+    )
+
+    Test-AzDevOpsSession
+
+    $requestBody = @{
+          "type" = "AzureKeyVault"
+          "name" = "$AzureDevOpsVarGroupName"
+          "providerData" = @{
+            "serviceEndpointId"= "$azureDevOpsEndpointId"
+            "vault" = "$keyVaultName"
+          }
+          "variables" = "$variables"
+} | ConvertTo-Json
+
+    $requestParameters = @{
+        
+        Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/variablegroups?api-version=4.1-preview.1"
+        Method = "POST"
+        Headers = $Global:headers
+        Body = $requestBody
+        ContentType = "application/json"
+
+    }
+
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+
+}
+
+function Update-AzDevOpsVariableGroup {
+    # TODO - Document how the variables object works
+        param(
+        [CmdletBinding]
+        [Parameter(Mandatory = $true)]
+        $Organization,
+        [Parameter(Mandatory = $true)]
+        $Project,
+        [Parameter(Mandatory = $true)]
+        $variableGroupId,
+        [Parameter(Mandatory = $true)]
+        $AzureDevOpsVarGroupName,
+        [Parameter(Mandatory = $true)]
+        $azureDevOpsEndpointId,
+        [Parameter(Mandatory = $true)]
+        $keyVaultName,
+        [Parameter(Mandatory = $true)]
+        $variables,
+        [Parameter(Mandatory = $false)]
+        $headers
+    )
+        Test-AzDevOpsSession
+
+        $requestBody = @{
+          "type" = "AzureKeyVault"
+          "name" = "$AzureDevOpsVarGroupName"
+          "providerData" = @{
+            "serviceEndpointId"= "$azureDevOpsEndpointId"
+            "vault" = "$keyVaultName"
+          }
+          "variables" = "$variables"
+} | ConvertTo-Json
+
+    $requestParameters = @{
+        
+        Uri = "https://dev.azure.com/$Organization/$Project/_apis/distributedtask/variablegroups/$variableGroupId`?api-version=4.1-preview.1"
+        Method = "PUT"
+        Headers = $Global:headers
+        Body = $requestBody
+        ContentType = "application/json"
+
+    }
+
+    (Invoke-RestMethod @requestParameters -UseBasicParsing)
+
+}
