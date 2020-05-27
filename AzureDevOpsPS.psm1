@@ -129,7 +129,7 @@ function New-AzDevOpsServiceEndpoint {
         }
         
         Invoke-RestMethod @requestParameters -UseBasicParsing
-}2
+}
 function Add-AzDevOpsEndpointRole {
 
         param(
